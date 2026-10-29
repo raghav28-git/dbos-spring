@@ -20,6 +20,10 @@ public class WorkflowContext {
         return next;
     }
 
+    public static int getCurrentStepId() {
+        return stepCounter.get();
+    }
+
     public static void clear() {
         currentWorkflowId.remove();
         stepCounter.remove();

@@ -2,6 +2,7 @@ package com.example.dbosspring.demo;
 
 import com.example.dbosspring.engine.annotation.Step;
 import com.example.dbosspring.engine.annotation.Workflow;
+import com.example.dbosspring.engine.provenance.ProvenanceService;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -10,10 +11,14 @@ import org.springframework.stereotype.Service;
 public class TransferWorkflowService {
 
     private final JdbcTemplate jdbcTemplate;
+    private final ProvenanceService provenanceService;
     private final TransferWorkflowService self;
 
-    public TransferWorkflowService(JdbcTemplate jdbcTemplate, @Lazy TransferWorkflowService self) {
+    public TransferWorkflowService(JdbcTemplate jdbcTemplate,
+                                   ProvenanceService provenanceService,
+                                   @Lazy TransferWorkflowService self) {
         this.jdbcTemplate = jdbcTemplate;
+        this.provenanceService = provenanceService;
         this.self = self;
     }
 
@@ -38,7 +43,21 @@ public class TransferWorkflowService {
 
     @Step(name = "deduct")
     public String deduct(String username, int amount) {
-        jdbcTemplate.update("UPDATE accounts SET balance = balance - ? WHERE username = ?", amount, username);
+        Integer before = jdbcTemplate.queryForObject(
+                "SELECT balance FROM accounts WHERE username = ?", Integer.class, username);
+
+        jdbcTemplate.update(
+                "UPDATE accounts SET balance = balance - ? WHERE username = ?", amount, username);
+
+        Integer after = jdbcTemplate.queryForObject(
+                "SELECT balance FROM accounts WHERE username = ?", Integer.class, username);
+
+        provenanceService.recordRowChange(
+                "accounts", username, "UPDATE",
+                "{\"balance\":" + before + "}",
+                "{\"balance\":" + after + "}"
+        );
+
         return "Deducted $" + amount + " from " + username;
     }
 
@@ -52,7 +71,21 @@ public class TransferWorkflowService {
 
     @Step(name = "credit")
     public String credit(String username, int amount) {
-        jdbcTemplate.update("UPDATE accounts SET balance = balance + ? WHERE username = ?", amount, username);
+        Integer before = jdbcTemplate.queryForObject(
+                "SELECT balance FROM accounts WHERE username = ?", Integer.class, username);
+
+        jdbcTemplate.update(
+                "UPDATE accounts SET balance = balance + ? WHERE username = ?", amount, username);
+
+        Integer after = jdbcTemplate.queryForObject(
+                "SELECT balance FROM accounts WHERE username = ?", Integer.class, username);
+
+        provenanceService.recordRowChange(
+                "accounts", username, "UPDATE",
+                "{\"balance\":" + before + "}",
+                "{\"balance\":" + after + "}"
+        );
+
         return "Credited $" + amount + " to " + username;
     }
 }
