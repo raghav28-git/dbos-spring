@@ -1,175 +1,144 @@
 # DBOS-Spring: Crash-Proof Workflow Engine, Cryptographic Provenance & Time-Travel Debugger
 
-> **Inspired by MIT & Stanford University's [DBOS / Apiary](https://www.dbos.dev/), R3 (Record-Replay-Retroaction), and Epoxy Research**
+**Live Interactive Studio:** [https://dbos-spring.vercel.app](https://dbos-spring.vercel.app)
 
-**DBOS-Spring** is a database-native durable execution engine, row-level data provenance tracker, and deterministic time-travel debugger built with **Java, Spring Boot, Spring AOP, PostgreSQL, and React/TypeScript**.
-
-Instead of relying on heavy external orchestration clusters (such as Temporal, Airflow, or Kafka), DBOS-Spring uses PostgreSQL ACID transactions as the single source of truth to make distributed multi-step business workflows crash-proof, cryptographically auditable, and replayable in an isolated sandbox.
+> **Inspired by MIT & Stanford University's [DBOS / Apiary](https://dbos-project.github.io/), R3 Time-Travel Replay, and Epoxy Research.**
 
 ---
 
-## Why DBOS-Spring?
+## 1. Executive Summary
+**DBOS-Spring** is a database-native distributed workflow engine, row-level data provenance tracker, and deterministic time-travel debugger built with **Java 25, Spring Boot 4, PostgreSQL 16, and React/TypeScript**.
 
-In distributed financial and enterprise applications, three critical failure modes occur:
-1. **Mid-Flight Server Crashes & Double-Charging:** A payment workflow deducts money from a sender, crashes before crediting the receiver, and charges the sender a second time upon retry.
-2. **Silent Data Tampering:** Traditional application logs exist outside the database and can become out-of-sync or fail to detect unauthorized direct edits to historical database records.
-3. **Non-Reproducible Production Bugs:** Debugging a failure hours after it occurred is difficult because live account balances and database rows have already mutated.
-
-**DBOS-Spring solves all three directly inside PostgreSQL:**
-* **Exactly-Once Step Execution (`@Workflow` & `@Step`):** Automatically checkpoints step outputs in PostgreSQL. If a server crashes mid-workflow, completed steps are skipped on recovery and return their saved checkpoint.
-* **Lock-Free Auto-Recovery Worker:** A background scheduler scans for interrupted `PENDING` workflows using `SELECT ... FOR UPDATE SKIP LOCKED` and resumes them automatically without human intervention.
-* **Tamper-Evident Row Provenance:** Every row mutation records `before_json` and `after_json` snapshots chained together with a cryptographic $\text{SHA-256}$ hash chain to immediately pinpoint unauthorized database tampering.
-* **R3 Time-Travel Sandbox Replay:** Reconstructs historical row states as they existed right before any past workflow executed, re-runs the workflow in an in-memory sandbox, and verifies deterministic state convergence.
+Instead of relying on heavyweight external orchestrators (like Temporal, Airflow, or Kafka), DBOS-Spring uses **PostgreSQL ACID transactions** as the single source of truth to provide three core guarantees:
+1. **Exactly-Once Step Execution (`@Workflow` & `@Step`):** Automatically checkpoints every atomic step in PostgreSQL. If a server crashes mid-flight, a background recovery worker (`SELECT ... FOR UPDATE SKIP LOCKED`) resumes the workflow from the exact point of failure without double-charging or repeating completed side effects.
+2. **Tamper-Evident Row-Level Provenance:** Captures `before` and `after` JSON snapshots of every mutated database row inside the same ACID transaction, chaining records together via a **SHA-256 cryptographic hash chain** (`prev_hash -> curr_hash`) to detect unauthorized database edits.
+3. **R3 Time-Travel Sandbox Replay:** Reconstructs historical database states prior to any past workflow execution and deterministically replays the business logic in an isolated sandbox without mutating live production balances.
 
 ---
 
-## System Architecture
+## 2. Try the Live Demo (`https://dbos-spring.vercel.app`)
+*(Note: The backend runs on Render's free tier—if the dashboard says `Loading DBOS Engine State...` on first visit, give the container ~30–50 seconds to wake up.)*
 
-~~~mermaid
+1. **Safe Execution:** Click **Transfer $100 (Safe)** to execute the 3-step money transfer (`Deduct Sender` -> `Fraud Check` -> `Credit Receiver`) and watch all three DAG nodes turn green.
+2. **Chaos Engineering & Auto-Recovery:** Click **Transfer $100 (Simulate Mid-Flight Crash)**. Step 1 deducts $100 from Alice, and the server immediately throws a simulated crash exception before Step 2. Watch the DAG highlight the crash in red—then wait **5 seconds** as the PostgreSQL background recovery worker automatically wakes up, skips Step 1 using its saved checkpoint, and completes Steps 2 and 3.
+3. **Cryptographic Tamper Detection:** Click **Simulate DB Hack** in the top-right header to secretly alter a historical row in PostgreSQL (`provenance_events`). The SHA-256 verifier immediately switches from `INTEGRITY_VERIFIED` to `TAMPER_DETECTED` and pinpoints the exact compromised event.
+4. **R3 Time-Travel Replay:** Click **Replay in Sandbox** on any historical workflow to reconstruct the exact pre-workflow account balances and verify 100% deterministic replay accuracy.
+5. **Reset State:** Click **Reset System** at any time to restore Alice and Bob to `$1000` each and clear tampered logs.
+
+---
+
+## 3. System Architecture
+
+```mermaid
 flowchart TB
-    subgraph Frontend ["Layer 4: React + TypeScript Visual Debugger Studio"]
-        DAG["Live React Flow Workflow DAG"]
-        Controls["Chaos Crash & Tamper Controls"]
-        Inspector["SHA-256 Provenance & R3 Replay Viewer"]
+    subgraph Frontend["React + TypeScript Visual Debugger Studio (Vercel)"]
+        DAG["Live 3-Step Workflow DAG (@xyflow/react)"]
+        Controls["Chaos, Tamper & Transfer Controls"]
+        Inspector["SHA-256 Provenance & R3 Replay Inspector"]
     end
 
-    subgraph Engine ["DBOS-Spring Core Engine (Spring Boot + AOP)"]
-        Aspect["Layer 1: WorkflowAspect (@Workflow / @Step Interceptor)"]
-        Worker["Layer 1: RecoveryWorker (FOR UPDATE SKIP LOCKED)"]
-        Provenance["Layer 2: ProvenanceService (SHA-256 Hash Chain)"]
-        Replay["Layer 3: ReplayService (R3 Historical Sandbox)"]
+    subgraph Backend["Spring Boot 4 Engine (Render Docker)"]
+        Controller["TransferController (/api/*)"]
+        Aspect["WorkflowAspect (@Workflow & @Step AOP Interceptor)"]
+        Worker["RecoveryWorker (@Scheduled 5s Auto-Recovery)"]
+        Prov["ProvenanceService (Row Snapshots + SHA-256 Chain)"]
+        Replay["ReplayService (R3 Historical State Reconstruction)"]
     end
 
-    subgraph DB ["PostgreSQL 16 (Single Source of Truth)"]
-        WF[("workflow_status")]
-        STEPS[("step_outputs")]
-        PROV[("provenance_events")]
-        ACC[("accounts (Business Table)")]
+    subgraph Database["PostgreSQL 16 (Neon Serverless)"]
+        T1[("workflow_status")]
+        T2[("step_outputs")]
+        T3[("provenance_events")]
+        T4[("accounts")]
     end
 
-    Frontend <-->|"REST API (/api/*)"| Engine
-    Aspect -->|"Read/Write Checkpoints"| WF
-    Aspect -->|"Skip or Save Step Output"| STEPS
-    Worker -->|"Poll Stuck PENDING Workflows"| WF
-    Provenance -->|"Append Chained Row Snapshots"| PROV
-    Replay -->|"Reconstruct Past State"| PROV
-    Aspect -->|"Execute Business SQL"| ACC
-~~~
+    Frontend <-->|"REST JSON"| Controller
+    Controller --> Aspect
+    Worker -->|"FOR UPDATE SKIP LOCKED"| T1
+    Worker --> Aspect
+    Aspect -->|"Checkpoints"| T1 & T2
+    Aspect --> Prov
+    Prov -->|"Before/After + SHA-256"| T3 & T4
+    Controller --> Replay
+    Replay -->|"Read-Only Time Travel"| T1 & T2 & T3
+```
 
 ---
 
-## Core Engineering Layers
+## 4. Technology Stack
 
-### Layer 1: Durable Execution & Crash Recovery (`@Workflow` & `@Step`)
-* Developers annotate any multi-step service method with `@Workflow` and its atomic operations with `@Step`.
-* `WorkflowAspect` intercepts each `@Step` call and checks `step_outputs` for `(workflow_id, step_id)`.
-* If a checkpoint exists, the engine skips execution and deserializes the stored output—guaranteeing idempotency across crashes and retries.
-* `RecoveryWorker` runs every $5\text{ seconds}$, claims workflows stuck in `PENDING` status via `SELECT ... FOR UPDATE SKIP LOCKED`, and resumes execution from the exact point of failure.
-
-### Layer 2: Row-Level Data Provenance & Cryptographic Audit Log
-* Whenever a `@Step` mutates a database record, `ProvenanceService` logs the exact `before_json` and `after_json` row snapshots tied to `(workflow_id, step_id)`.
-* Each event is cryptographically linked to the previous event using a $\text{SHA-256}$ hash chain:
-
-$$H_n = \text{SHA-256}(H_{n-1} \parallel \text{workflow\_id} \parallel \text{step\_id} \parallel \text{table} \parallel \text{row\_key} \parallel \text{op} \parallel \text{before\_json} \parallel \text{after\_json})$$
-
-* Calling `/api/verify` recomputes the entire chain from `GENESIS` and immediately flags the exact `event_id` and `workflow_id` if any historical record was altered.
-
-### Layer 3: R3 Time-Travel State Reconstruction & Sandbox Replay
-* Given any historical `workflow_id`, `ReplayService` queries the provenance timeline to reconstruct the exact starting balances (`historicalStateBefore`) prior to that workflow's execution—even if hundreds of subsequent transactions have modified the live tables since then.
-* It re-executes the workflow inputs inside an isolated in-memory sandbox (`sandboxReplayedStateAfter`) without mutating live PostgreSQL rows and verifies `deterministicMatch == true`.
-
-### Layer 4: Visual Debugger Studio (React + TypeScript + React Flow)
-* **Live Workflow DAG:** Displays the 3-step Money Transfer pipeline (`Step 1: Deduct Sender` $\rightarrow$ `Step 2: Fraud Check` $\rightarrow$ `Step 3: Credit Receiver`), highlighting completed steps in green and mid-flight crashes in red.
-* **Chaos Engineering Controls:** One-click buttons to trigger safe transfers, simulate a mid-flight server crash right after deducting funds, or simulate a malicious database hack on historical records.
-* **Interactive Time-Travel Inspector:** Click any past workflow to inspect its checkpointed outputs and run a side-by-side R3 sandbox replay.
+* **Language & Runtime:** Java 25 (Eclipse Temurin)
+* **Backend Framework:** Spring Boot 4.1.2 (Spring Web, Spring JDBC, Spring AOP / AspectJ, Scheduling)
+* **Database:** PostgreSQL 16 (Neon Serverless in production, Docker Compose locally)
+* **Frontend Studio:** React 19, TypeScript, Vite, React Flow (`@xyflow/react`), Lucide Icons
+* **Cloud Infrastructure:** Vercel (Frontend), Render Docker Web Service (Backend), Neon (Managed PostgreSQL)
 
 ---
 
-## Database Schema
+## 5. Database Schema Blueprint
 
-| Table Name | Layer | Description |
-| :--- | :--- | :--- |
-| `workflow_status` | Layer 1 (Engine Core) | Tracks workflow lifecycle (`workflow_id`, `workflow_name`, `status`, `input_json`, `created_at`, `updated_at`). |
-| `step_outputs` | Layer 1 (Engine Core) | Stores atomic step checkpoints (`workflow_id`, `step_id`, `step_name`, `output_json`, `completed_at`). |
-| `provenance_events` | Layer 2 (Audit & Security) | Append-only row history (`event_id`, `workflow_id`, `step_id`, `table_name`, `row_key`, `op_type`, `before_json`, `after_json`, `prev_hash`, `curr_hash`). |
-| `accounts` | Layer 4 (Demo Workload) | Demo bank accounts (`username`, `balance`) seeded with `alice` ($1000) and `bob` ($1000). |
+* **`workflow_status`**: Tracks top-level workflow execution state (`workflow_id`, `workflow_name`, `status` [`PENDING` | `COMPLETED`], `input_json`, `created_at`, `updated_at`).
+* **`step_outputs`**: Stores idempotent step checkpoints (`workflow_id`, `step_id`, `step_name`, `output_json`, `completed_at`).
+* **`provenance_events`**: Append-only cryptographic audit log (`event_id`, `workflow_id`, `step_id`, `table_name`, `row_key`, `op_type`, `before_json`, `after_json`, `prev_hash`, `curr_hash`).
+* **`accounts`**: Reference banking workload (`username`, `balance`) seeded with `alice` ($1000) and `bob` ($1000).
 
 ---
 
-## Project Structure
+## 6. Project Structure
 
-~~~text
+```text
 dbosspring/
-├── docker-compose.yml                  # PostgreSQL 16 container configuration
-├── pom.xml                             # Maven build & Spring Boot / AOP dependencies
+├── Dockerfile                          # Multi-stage Java 25 production build for Render
+├── docker-compose.yml                  # Local PostgreSQL 16 container
+├── pom.xml                             # Maven dependencies (Spring Boot, JDBC, AspectJ)
 ├── src/main/resources/
-│   ├── application.yml                 # Database connection & schema initialization config
-│   └── schema.sql                      # Auto-initialized engine & demo tables
+│   ├── application.yml                 # Cloud & local datasource configuration
+│   └── schema.sql                      # Auto-initialized database tables & seed data
 ├── src/main/java/com/example/dbosspring/
-│   ├── engine/                         # REUSABLE DBOS-SPRING CORE ENGINE
-│   │   ├── annotation/                 # @Workflow and @Step declarative annotations
-│   │   ├── context/                    # ThreadLocal WorkflowContext (workflowId & stepId tracker)
-│   │   ├── aspect/                     # WorkflowAspect AOP interceptor for checkpointing
-│   │   ├── recovery/                   # Scheduled RecoveryWorker (FOR UPDATE SKIP LOCKED)
-│   │   ├── provenance/                 # ProvenanceService (row capture & SHA-256 verifier)
-│   │   └── replay/                     # ReplayService (R3 time-travel state reconstruction)
-│   └── demo/                           # REFERENCE MONEY TRANSFER APPLICATION
-│       ├── TransferWorkflowService.java# 3-step transfer workflow with crash simulation switch
-│       └── TransferController.java     # REST API endpoints for execution, verification & replay
-└── frontend/                           # React + TypeScript + React Flow Visual Debugger Studio
-~~~
+│   ├── engine/                         # REUSABLE CORE ENGINE
+│   │   ├── annotation/                 # @Workflow and @Step annotations
+│   │   ├── context/                    # ThreadLocal WorkflowContext tracker
+│   │   ├── aspect/                     # WorkflowAspect checkpointing interceptor
+│   │   ├── recovery/                   # RecoveryWorker background crash recovery
+│   │   ├── provenance/                 # ProvenanceService SHA-256 hash chain & verifier
+│   │   └── replay/                     # ReplayService R3 time-travel sandbox engine
+│   └── demo/                           # REFERENCE APPLICATION
+│       ├── TransferWorkflowService.java# 3-step money transfer with crash switch
+│       └── TransferController.java     # REST endpoints for transfers, verify, tamper & replay
+└── frontend/                           # React + TypeScript Visual Debugger Studio (Vercel)
+```
 
 ---
 
-## Getting Started (Local Setup)
+## 7. Running Locally
 
 ### Prerequisites
-* **Java 21+** (or JDK 25)
-* **Docker Desktop** (for PostgreSQL 16)
-* **Node.js 18+** & **npm**
+* **Java 25** (or Java 21+)
+* **Docker Desktop**
+* **Node.js 20+**
 
-### 1. Start PostgreSQL via Docker Compose
-From the project root directory (`dbosspring/`):
-~~~powershell
+### 1. Start PostgreSQL & Spring Boot Backend
+```powershell
 docker compose up -d
-~~~
+./mvnw spring-boot:run
+```
+The backend will start at `http://localhost:8080` and automatically initialize `schema.sql`.
 
-### 2. Start the Spring Boot Engine Backend
-~~~powershell
-.\mvnw.cmd spring-boot:run
-~~~
-The backend server will start at `http://localhost:8080` and automatically initialize `schema.sql`.
-
-### 3. Start the React Visual Debugger Studio
-Open a second terminal and run:
-~~~powershell
+### 2. Start the React Visual Debugger Studio
+```powershell
 cd frontend
 npm install
 npm run dev
-~~~
+```
 Open `http://localhost:5173` in your browser.
 
 ---
 
-## End-to-End Verification Walkthrough
+## 8. Core API Reference
 
-1. **Safe Execution:** Click **"Transfer $100 (Safe)"** in the dashboard. Observe `alice` move from `$1000` to `$900` and `bob` move from `$1000` to `$1100`, with all three DAG nodes turning green (`COMPLETED`).
-2. **Crash & Auto-Recovery:** Click **"Transfer $100 (Simulate Mid-Flight Crash)"**.
-   * `Step 1 (Deduct)` completes and checkpoints in PostgreSQL, deducting `$100` from `alice`.
-   * The workflow crashes before `Step 2 (Fraud Check)` and turns red (`PENDING`).
-   * Wait $5\text{ seconds}$: `RecoveryWorker` automatically detects the interrupted workflow, skips `Step 1` using the saved checkpoint (preventing a double deduction!), executes `Step 2` and `Step 3`, and marks the workflow `COMPLETED`.
-3. **Cryptographic Tamper Detection:** Click **"Simulate DB Hack"** in the top-right header. An unauthorized SQL update alters a historical row in `provenance_events`. The provenance badge immediately switches from `INTEGRITY_VERIFIED` to `TAMPER_DETECTED`, identifying the exact compromised `event_id`.
-4. **R3 Time-Travel Replay:** Click **"Replay in Sandbox"** on any historical workflow in the middle panel to reconstruct the historical balances prior to that transaction and verify `Deterministic Match: YES`.
-
----
-
-## REST API Reference
-
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET/POST` | `/api/transfer?workflowId=tx-101&amount=100&crash=false` | Triggers a 3-step money transfer workflow (set `crash=true` to simulate a mid-flight failure). |
-| `GET` | `/api/state` | Returns live account balances, workflow statuses, checkpoints, provenance events, and hash integrity status. |
-| `GET` | `/api/verify` | Verifies the entire $\text{SHA-256}$ hash chain across `provenance_events`. |
-| `GET/POST` | `/api/tamper` | Simulates an attacker modifying a historical balance inside `provenance_events`. |
-| `GET` | `/api/replay?workflowId=tx-101` | Reconstructs historical state before `tx-101` and replays the transfer in an isolated sandbox. |
-| `GET/POST` | `/api/reset` | Resets all tables and restores `alice` and `bob` to `$1000` each. |
+* `GET/POST /api/transfer?workflowId=tx-101&from=alice&to=bob&amount=100&crash=false` — Trigger a crash-proof transfer workflow.
+* `GET /api/state` — Fetch live balances, workflow statuses, checkpoints, provenance events, and hash chain integrity status.
+* `GET /api/verify` — Walk the entire `provenance_events` SHA-256 chain from `GENESIS` to verify database integrity.
+* `POST /api/tamper` — Simulate an unauthorized database modification on historical provenance records.
+* `GET /api/replay?workflowId=tx-101` — Reconstruct historical balances and execute a deterministic R3 sandbox replay.
+* `POST /api/reset` — Reset accounts to `$1000` each and clear execution history.
