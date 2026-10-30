@@ -1,0 +1,80 @@
+.app-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 24px;
+}
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  background: #111827;
+  color: #ffffff;
+  padding: 16px 24px;
+  border-radius: 10px;
+}
+.header h1 {
+  margin: 0;
+  font-size: 22px;
+  color: #ffffff;
+}
+.dag-card {
+  background: white;
+  padding: 16px 20px;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  margin-bottom: 20px;
+}
+.dashboard {
+  display: grid;
+  grid-template-columns: 1fr 1.1fr 1.3fr;
+  gap: 20px;
+}
+.card {
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+.card h2 {
+  margin-top: 0;
+  color: #111827;
+  font-size: 18px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 10px;
+}
+button {
+  padding: 9px 16px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  color: white;
+  transition: opacity 0.15s;
+}
+button:hover { opacity: 0.9; }
+.btn-blue { background: #2563eb; }
+.btn-red { background: #dc2626; }
+.btn-gray { background: #4b5563; }
+.badge-green { background: #d1fae5; color: #065f46; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 700; }
+.badge-red { background: #fee2e2; color: #991b1b; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 700; }
+.workflow-item {
+  border: 1px solid #e5e7eb;
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  cursor: pointer;
+}
+.workflow-item.selected {
+  border: 2px solid #2563eb;
+  background: #eff6ff;
+}
+pre {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #0f172a;
+  padding: 10px;
+  border-radius: 6px;
+  overflow-x: auto;
+  font-size: 12px;
+}
