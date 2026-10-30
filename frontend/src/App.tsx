@@ -4,13 +4,15 @@ import '@xyflow/react/dist/style.css'
 import { Database, ShieldAlert, ShieldCheck, RotateCcw } from 'lucide-react'
 import './App.css'
 
+const API_BASE =
+  import.meta.env.VITE_API_URL || 'http://localhost:8080'
 export default function App() {
   const [state, setState] = useState<any>(null)
   const [selectedWfId, setSelectedWfId] = useState<string | null>(null)
   const [replayData, setReplayData] = useState<any>(null)
 
   const fetchState = () =>
-    fetch('http://localhost:8080/api/state')
+    fetch(`${API_BASE}/api/state`)
       .then(r => r.json())
       .then(data => {
         setState(data)
@@ -27,14 +29,14 @@ export default function App() {
 
   const apiCall = async (endpoint: string, newWfId?: string) => {
     if (newWfId) setSelectedWfId(newWfId)
-    await fetch(`http://localhost:8080/api/${endpoint}`)
+    await fetch(`${API_BASE}/api/${endpoint}`)
     fetchState()
     setReplayData(null)
   }
 
   const runReplay = async (workflowId: string) => {
     setSelectedWfId(workflowId)
-    const res = await fetch(`http://localhost:8080/api/replay?workflowId=${workflowId}`).then(r => r.json())
+    const res = await fetch(`${API_BASE}/api/replay?workflowId=${encodeURIComponent(workflowId)}`).then(r => r.json())
     setReplayData(res)
   }
 
