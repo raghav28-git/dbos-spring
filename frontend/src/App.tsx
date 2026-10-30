@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type MouseEvent } from 'react'
 import { ReactFlow, Background, MarkerType, type Node, type Edge } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import {
@@ -11,6 +11,11 @@ import {
   RotateCw,
   ArrowRight,
   CheckCircle2,
+  Copy,
+  Check,
+  Layers,
+  Activity,
+  Lock,
 } from 'lucide-react'
 import './App.css'
 
@@ -20,6 +25,8 @@ export default function App() {
   const [state, setState] = useState<any>(null)
   const [selectedWfId, setSelectedWfId] = useState<string | null>(null)
   const [replayData, setReplayData] = useState<any>(null)
+  const [amount, setAmount] = useState<number>(100)
+  const [copiedHash, setCopiedHash] = useState<string | null>(null)
 
   // Scroll-reactive fluid background variables
   useEffect(() => {
@@ -70,10 +77,22 @@ export default function App() {
     setReplayData(res)
   }
 
+  const handleCardMouseMove = (e: MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    e.currentTarget.style.setProperty('--mouse-x', `${e.clientX - rect.left}px`)
+    e.currentTarget.style.setProperty('--mouse-y', `${e.clientY - rect.top}px`)
+  }
+
+  const copyHash = (hash: string) => {
+    navigator.clipboard.writeText(hash)
+    setCopiedHash(hash)
+    setTimeout(() => setCopiedHash(null), 1800)
+  }
+
   if (!state) {
     return (
       <>
-        <div className="ambient-backdrop">
+        <div className="ambient-backdrop" data-mood="nominal">
           <div className="orb orb-primary" />
           <div className="orb orb-secondary" />
         </div>
@@ -88,13 +107,16 @@ export default function App() {
             letterSpacing: '0.02em',
           }}
         >
-          Connecting to DBOS Engine...
+          Synchronizing with DBOS Engine...
         </div>
       </>
     )
   }
 
   const isTampered = state.integrity?.valid === false
+  const hasPending = state.workflows?.some((w: any) => w.status === 'PENDING')
+  const ambientMood = isTampered ? 'tampered' : hasPending ? 'recovering' : 'nominal'
+
   const activeWf = state.workflows.find((w: any) => w.workflow_id === selectedWfId) || state.workflows[0]
   const activeWfId = activeWf?.workflow_id
   const completedStepIds = new Set(
@@ -106,24 +128,28 @@ export default function App() {
     const isCrashedHere = activeWf?.status === 'PENDING' && !isDone && completedStepIds.has(stepNum - 1)
     return {
       background: isDone
-        ? 'rgba(16, 185, 129, 0.1)'
+        ? 'rgba(16, 185, 129, 0.11)'
         : isCrashedHere
-        ? 'rgba(244, 63, 94, 0.14)'
-        : 'rgba(15, 18, 28, 0.8)',
-      color: isDone ? '#ecfdf5' : isCrashedHere ? '#ffe4e6' : '#94a3b8',
+        ? 'rgba(245, 158, 11, 0.15)'
+        : 'rgba(15, 18, 28, 0.82)',
+      color: isDone ? '#ecfdf5' : isCrashedHere ? '#fef3c7' : '#94a3b8',
       border: `1px solid ${
-        isDone ? 'rgba(16, 185, 129, 0.45)' : isCrashedHere ? 'rgba(244, 63, 94, 0.55)' : 'rgba(255, 255, 255, 0.08)'
+        isDone
+          ? 'rgba(16, 185, 129, 0.45)'
+          : isCrashedHere
+          ? 'rgba(245, 158, 11, 0.55)'
+          : 'rgba(255, 255, 255, 0.08)'
       }`,
       boxShadow: isDone
-        ? '0 12px 30px -10px rgba(16, 185, 129, 0.25)'
+        ? '0 14px 32px -10px rgba(16, 185, 129, 0.28)'
         : isCrashedHere
-        ? '0 12px 30px -10px rgba(244, 63, 94, 0.35)'
+        ? '0 14px 32px -10px rgba(245, 158, 11, 0.35)'
         : 'none',
       borderRadius: '14px',
       padding: '14px 16px',
       fontSize: '12.5px',
       fontWeight: 500,
-      width: 230,
+      width: 235,
       textAlign: 'center' as const,
       backdropFilter: 'blur(12px)',
     }
@@ -132,31 +158,31 @@ export default function App() {
   const nodes: Node[] = [
     {
       id: '1',
-      position: { x: 60, y: 65 },
+      position: { x: 55, y: 68 },
       data: { label: `01 · Deduct Sender ${completedStepIds.has(1) ? '✓' : ''}` },
       style: getStepStyle(1),
     },
     {
       id: '2',
-      position: { x: 395, y: 65 },
+      position: { x: 395, y: 68 },
       data: {
         label: completedStepIds.has(2)
           ? '02 · Fraud Verification ✓'
           : activeWf?.status === 'PENDING'
-          ? 'Interrupted · Recovering'
+          ? 'Interrupted · Recovering (5s)'
           : '02 · Fraud Verification',
       },
       style: getStepStyle(2),
     },
     {
       id: '3',
-      position: { x: 730, y: 65 },
+      position: { x: 735, y: 68 },
       data: { label: `03 · Credit Receiver ${completedStepIds.has(3) ? '✓' : ''}` },
       style: getStepStyle(3),
     },
   ]
 
-  const edgeColor = activeWf?.status === 'PENDING' ? '#f43f5e' : '#6366f1'
+  const edgeColor = activeWf?.status === 'PENDING' ? '#f59e0b' : '#6366f1'
 
   const edges: Edge[] = [
     {
@@ -164,7 +190,7 @@ export default function App() {
       source: '1',
       target: '2',
       animated: activeWf?.status === 'PENDING',
-      style: { stroke: completedStepIds.has(2) ? '#10b981' : edgeColor, strokeWidth: 1.75 },
+      style: { stroke: completedStepIds.has(2) ? '#10b981' : edgeColor, strokeWidth: 1.8 },
       markerEnd: { type: MarkerType.ArrowClosed, color: completedStepIds.has(2) ? '#10b981' : edgeColor },
     },
     {
@@ -172,18 +198,18 @@ export default function App() {
       source: '2',
       target: '3',
       animated: activeWf?.status === 'PENDING',
-      style: { stroke: completedStepIds.has(3) ? '#10b981' : 'rgba(255,255,255,0.15)', strokeWidth: 1.75 },
+      style: { stroke: completedStepIds.has(3) ? '#10b981' : 'rgba(255,255,255,0.16)', strokeWidth: 1.8 },
       markerEnd: {
         type: MarkerType.ArrowClosed,
-        color: completedStepIds.has(3) ? '#10b981' : 'rgba(255,255,255,0.25)',
+        color: completedStepIds.has(3) ? '#10b981' : 'rgba(255,255,255,0.26)',
       },
     },
   ]
 
   return (
     <>
-      {/* Scroll-Reactive Fluid Background */}
-      <div className="ambient-backdrop">
+      {/* Scroll-Reactive & State-Adaptive Fluid Background */}
+      <div className="ambient-backdrop" data-mood={ambientMood}>
         <div className="orb orb-primary" />
         <div className="orb orb-secondary" />
         <div className="orb orb-tertiary" />
@@ -198,12 +224,17 @@ export default function App() {
               <Sparkles size={15} />
             </div>
             <span className="brand-title">DBOS Studio</span>
+            <span className="brand-tag mono">ACID · R3</span>
           </div>
 
           <div className="nav-actions">
             <div className={`status-chip ${isTampered ? 'tampered' : 'verified'}`}>
               {isTampered ? <ShieldAlert size={14} /> : <ShieldCheck size={14} />}
-              <span>{isTampered ? 'Tamper Detected' : 'Chain Verified'}</span>
+              <span>
+                {isTampered
+                  ? `Tamper Alert · Event #${state.integrity?.tamperedEventId ?? ''}`
+                  : 'SHA-256 Chain Verified'}
+              </span>
             </div>
             <button className="btn-ghost" onClick={() => apiCall('tamper')}>
               Simulate Tamper
@@ -213,6 +244,30 @@ export default function App() {
             </button>
           </div>
         </nav>
+
+        {/* Minimal Telemetry Strip */}
+        <div className="metrics-strip">
+          <div className="metric-pill">
+            <span className="metric-label">
+              <Activity size={14} color="#6366f1" /> Engine State
+            </span>
+            <span className="metric-val mono" style={{ color: hasPending ? '#fbbf24' : '#34d399' }}>
+              {hasPending ? 'RECOVERING_LOCK' : 'NOMINAL_SYNC'}
+            </span>
+          </div>
+          <div className="metric-pill">
+            <span className="metric-label">
+              <Layers size={14} color="#38bdf8" /> Checkpointed Steps
+            </span>
+            <span className="metric-val mono">{state.steps.length} committed</span>
+          </div>
+          <div className="metric-pill">
+            <span className="metric-label">
+              <Lock size={14} color="#10b981" /> Verified Audit Blocks
+            </span>
+            <span className="metric-val mono">{state.provenance.length} hashes</span>
+          </div>
+        </div>
 
         {/* Stage 1: Capital & Workflow Dispatch */}
         <section className="section-block">
@@ -224,7 +279,7 @@ export default function App() {
           </div>
 
           <div className="hero-grid">
-            <div className="glass-card">
+            <div className="glass-card" onMouseMove={handleCardMouseMove}>
               <div className="eyebrow">Live Account Balances</div>
               <div className="balances-row">
                 {state.accounts.map((acc: any) => (
@@ -239,12 +294,25 @@ export default function App() {
               </div>
             </div>
 
-            <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+            <div
+              className="glass-card"
+              onMouseMove={handleCardMouseMove}
+              style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}
+            >
               <div>
                 <div className="eyebrow">Atomic Dispatch</div>
-                <p style={{ margin: '8px 0 20px', fontSize: 13.5, color: '#94a3b8', lineHeight: 1.55 }}>
-                  Execute an ACID-checkpointed transfer or trigger a mid-flight fault to observe automatic background recovery.
-                </p>
+                <div className="amount-selector">
+                  {[50, 100, 250].map(val => (
+                    <button
+                      key={val}
+                      type="button"
+                      className={`amount-chip mono ${amount === val ? 'active' : ''}`}
+                      onClick={() => setAmount(val)}
+                    >
+                      ${val}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -252,20 +320,20 @@ export default function App() {
                   className="btn-primary"
                   onClick={() => {
                     const id = `tx-${Date.now()}`
-                    apiCall(`transfer?workflowId=${id}&amount=100&crash=false`, id)
+                    apiCall(`transfer?workflowId=${id}&amount=${amount}&crash=false`, id)
                   }}
                 >
-                  <Zap size={15} /> Transfer $100
+                  <Zap size={15} /> Transfer ${amount}
                 </button>
 
                 <button
                   className="btn-chaos"
                   onClick={() => {
                     const id = `tx-${Date.now()}`
-                    apiCall(`transfer?workflowId=${id}&amount=100&crash=true`, id)
+                    apiCall(`transfer?workflowId=${id}&amount=${amount}&crash=true`, id)
                   }}
                 >
-                  Simulate Mid-Flight Crash
+                  Simulate Mid-Flight Crash (${amount})
                 </button>
               </div>
             </div>
@@ -291,7 +359,7 @@ export default function App() {
             )}
           </div>
 
-          <div className="glass-card" style={{ padding: 14 }}>
+          <div className="glass-card" onMouseMove={handleCardMouseMove} style={{ padding: 14 }}>
             <div className="dag-frame">
               <ReactFlow nodes={nodes} edges={edges} fitView proOptions={{ hideAttribution: true }}>
                 <Background color="rgba(255,255,255,0.07)" gap={24} size={1} />
@@ -311,16 +379,19 @@ export default function App() {
 
           <div className="ledger-grid">
             {/* Left Column: Workflow Runs */}
-            <div className="glass-card">
+            <div className="glass-card" onMouseMove={handleCardMouseMove}>
               <div className="eyebrow" style={{ marginBottom: 16 }}>
                 Workflow History ({state.workflows.length})
               </div>
 
               <div className="list-stack">
-                {state.workflows.slice(0, 8).map((wf: any) => (
+                {state.workflows.slice(0, 8).map((wf: any, index: number) => (
                   <div
                     key={wf.workflow_id}
-                    className={`wf-row ${wf.workflow_id === activeWfId ? 'active' : ''}`}
+                    style={{ animationDelay: `${index * 45}ms` }}
+                    className={`wf-row ${wf.workflow_id === activeWfId ? 'active' : ''} ${
+                      wf.status === 'PENDING' ? 'recovering' : ''
+                    }`}
                     onClick={() => setSelectedWfId(wf.workflow_id)}
                   >
                     <div>
@@ -328,7 +399,9 @@ export default function App() {
                         {wf.workflow_id}
                       </div>
                       <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
-                        {wf.status === 'COMPLETED' ? 'All 3 checkpoints committed' : 'Awaiting auto-recovery worker'}
+                        {wf.status === 'COMPLETED'
+                          ? '3/3 steps checkpointed'
+                          : 'Interrupted · Auto-resuming in 5s'}
                       </div>
                     </div>
 
@@ -352,7 +425,7 @@ export default function App() {
             </div>
 
             {/* Right Column: Provenance Stream or Time-Travel Sandbox */}
-            <div className="glass-card">
+            <div className="glass-card" onMouseMove={handleCardMouseMove}>
               {replayData ? (
                 <div className="replay-surface">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -393,8 +466,12 @@ export default function App() {
                   </div>
 
                   <div className="list-stack">
-                    {state.provenance.slice(0, 6).map((prov: any) => (
-                      <div key={prov.event_id} className="audit-item">
+                    {state.provenance.slice(0, 6).map((prov: any, index: number) => (
+                      <div
+                        key={prov.event_id}
+                        style={{ animationDelay: `${index * 45}ms` }}
+                        className="audit-item"
+                      >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ fontSize: 13, fontWeight: 500, color: '#f8fafc' }}>
                             {prov.row_key.toUpperCase()}{' '}
@@ -411,9 +488,24 @@ export default function App() {
                           <span className="state-pill after">{prov.after_json}</span>
                         </div>
 
-                        <div className="mono" style={{ fontSize: 11, color: '#475569' }}>
-                          {prov.curr_hash.substring(0, 42)}…
-                        </div>
+                        <button
+                          type="button"
+                          className="hash-chip mono"
+                          onClick={() => copyHash(prov.curr_hash)}
+                          title="Click to copy full SHA-256 hash"
+                        >
+                          {copiedHash === prov.curr_hash ? (
+                            <>
+                              <Check size={11} color="#34d399" />
+                              <span style={{ color: '#34d399' }}>Copied full SHA-256 digest</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy size={11} />
+                              <span>{prov.curr_hash.substring(0, 38)}…</span>
+                            </>
+                          )}
+                        </button>
                       </div>
                     ))}
                   </div>

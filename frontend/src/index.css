@@ -3,19 +3,20 @@
 :root {
   --scroll-y: 0px;
   --scroll-progress: 0;
-  --bg-base: #05060a;
-  --surface: rgba(16, 19, 30, 0.55);
-  --surface-hover: rgba(24, 29, 45, 0.72);
+  --bg-base: #040509;
+  --surface: rgba(14, 17, 28, 0.52);
+  --surface-elevated: rgba(20, 25, 40, 0.68);
   --border-subtle: rgba(255, 255, 255, 0.07);
   --border-highlight: rgba(255, 255, 255, 0.16);
   --text-primary: #f8fafc;
   --text-secondary: #94a3b8;
   --text-muted: #475569;
   --accent: #6366f1;
-  --accent-glow: rgba(99, 102, 241, 0.35);
+  --accent-cyan: #38bdf8;
   --success: #10b981;
+  --warning: #f59e0b;
   --danger: #f43f5e;
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 * {
